@@ -1,4 +1,6 @@
 [package]
+name = "raw-cpuid"
+version = "2.0.2"
 authors = ["Gerd Zellweger <mail@gerdzellweger.com>"]
 edition = "2018"
 name = "raw-cpuid"
@@ -32,7 +34,9 @@ termimad = {version = "0.20", optional = true}
 clap = {version = "3.1.6", features = ["derive"], optional = true}
 
 [target.'cfg(unix)'.dev-dependencies]
-core_affinity = "0.5.10"
-libc = {version = "0.2", default-features = false}
-phf = {version = "0.11", features = ["macros"]}
-rustversion = "1.0"
+libc = { version = "0.2", default-features = false }
+core_affinity = "0.5.9"
+
+[build-dependencies]
+rustc_version = "0.2"
+cc = "1"
