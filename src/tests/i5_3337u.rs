@@ -1,4 +1,4 @@
-use *;
+use crate::*;
 
 #[test]
 fn genuine_intel() {
@@ -7,12 +7,13 @@ fn genuine_intel() {
         edx: 1231384169,
         ecx: 1818588270,
     };
-    assert!(vf.as_string() == "GenuineIntel");
+    assert!(vf.as_str() == "GenuineIntel");
 }
 
 #[test]
 fn feature_info() {
     let finfo = FeatureInfo {
+        vendor: Vendor::Intel,
         eax: 198313,
         ebx: 34605056,
         edx_ecx: FeatureInfoFlags {
@@ -20,11 +21,11 @@ fn feature_info() {
         },
     };
 
-    assert!(finfo.model_id() == 10);
+    assert!(finfo.base_model_id() == 10);
     assert!(finfo.extended_model_id() == 3);
     assert!(finfo.stepping_id() == 9);
     assert!(finfo.extended_family_id() == 0);
-    assert!(finfo.family_id() == 6);
+    assert!(finfo.base_family_id() == 6);
     assert!(finfo.stepping_id() == 9);
     assert!(finfo.brand_index() == 0);
 
@@ -84,7 +85,7 @@ fn cache_parameters() {
         },
     ];
 
-    for (idx, cache) in caches.into_iter().enumerate() {
+    for (idx, cache) in caches.iter().enumerate() {
         match idx {
             0 => {
                 assert!(cache.cache_type() == CacheType::Data);
@@ -179,7 +180,7 @@ fn thermal_power_features() {
         eax: ThermalPowerFeaturesEax { bits: 119 },
         ebx: 2,
         ecx: ThermalPowerFeaturesEcx { bits: 9 },
-        edx: 0,
+        _edx: 0,
     };
 
     assert!(tpfeatures.eax.contains(ThermalPowerFeaturesEax::DTS));
@@ -213,7 +214,7 @@ fn thermal_power_features() {
             | ThermalPowerFeaturesEax::HDC,
         ebx: 2,
         ecx: ThermalPowerFeaturesEcx::HW_COORD_FEEDBACK | ThermalPowerFeaturesEcx::ENERGY_BIAS_PREF,
-        edx: 0,
+        _edx: 0,
     };
 
     assert!(tpfeatures.has_dts());
@@ -237,12 +238,12 @@ fn thermal_power_features() {
 #[test]
 fn extended_features() {
     let tpfeatures = ExtendedFeatures {
-        eax: 0,
+        _eax: 0,
         ebx: ExtendedFeaturesEbx { bits: 641 },
         ecx: ExtendedFeaturesEcx { bits: 0 },
-        edx: 0,
+        _edx: 0,
     };
-    assert!(tpfeatures.eax == 0);
+    assert!(tpfeatures._eax == 0);
     assert!(tpfeatures.has_fsgsbase());
     assert!(!tpfeatures.has_tsc_adjust_msr());
     assert!(!tpfeatures.has_bmi1());
@@ -257,7 +258,7 @@ fn extended_features() {
     assert!(!tpfeatures.has_fpu_cs_ds_deprecated());
 
     let tpfeatures2 = ExtendedFeatures {
-        eax: 0,
+        _eax: 0,
         ebx: ExtendedFeaturesEbx::FSGSBASE
             | ExtendedFeaturesEbx::ADJUST_MSR
             | ExtendedFeaturesEbx::BMI1
@@ -274,7 +275,7 @@ fn extended_features() {
             | ExtendedFeaturesEbx::CLFLUSHOPT
             | ExtendedFeaturesEbx::PROCESSOR_TRACE,
         ecx: ExtendedFeaturesEcx { bits: 0 },
-        edx: 201326592,
+        _edx: 201326592,
     };
 
     assert!(tpfeatures2.has_fsgsbase());
@@ -305,7 +306,7 @@ fn performance_monitoring_info() {
     let pm = PerformanceMonitoringInfo {
         eax: 120587267,
         ebx: PerformanceMonitoringFeaturesEbx { bits: 0 },
-        ecx: 0,
+        _ecx: 0,
         edx: 1539,
     };
 
@@ -368,17 +369,47 @@ fn extended_topology_info() {
     assert!(l2.shift_right_for_next_apic_id() == 4);
 }
 
+#[cfg(test)]
+#[test]
+fn extended_topology_info_v2() {
+    let l1 = ExtendedTopologyLevel {
+        eax: 1,
+        ebx: 2,
+        ecx: 256,
+        edx: 3,
+    };
+    let l2 = ExtendedTopologyLevel {
+        eax: 4,
+        ebx: 4,
+        ecx: 513,
+        edx: 3,
+    };
+
+    assert!(l1.processors() == 2);
+    assert!(l1.level_number() == 0);
+    assert!(l1.level_type() == TopologyType::SMT);
+    assert!(l1.x2apic_id() == 3);
+    assert!(l1.shift_right_for_next_apic_id() == 1);
+
+    assert!(l2.processors() == 4);
+    assert!(l2.level_number() == 1);
+    assert!(l2.level_type() == TopologyType::Core);
+    assert!(l2.x2apic_id() == 3);
+    assert!(l2.shift_right_for_next_apic_id() == 4);
+}
+
 #[test]
 fn extended_state_info() {
     let es = ExtendedStateInfo {
+        read: Default::default(),
         eax: ExtendedStateInfoXCR0Flags { bits: 7 },
         ebx: 832,
         ecx: 832,
-        edx: 0,
+        _edx: 0,
         eax1: 1,
         ebx1: 0,
         ecx1: ExtendedStateInfoXSSFlags { bits: 0 },
-        edx1: 0,
+        _edx1: 0,
     };
 
     assert!(es.xsave_area_size_enabled_features() == 832);
@@ -397,6 +428,7 @@ fn extended_state_info3() {
     });*/
 
     let esi = ExtendedStateInfo {
+        read: Default::default(),
         eax: ExtendedStateInfoXCR0Flags::LEGACY_X87
             | ExtendedStateInfoXCR0Flags::SSE128
             | ExtendedStateInfoXCR0Flags::AVX256
@@ -408,11 +440,11 @@ fn extended_state_info3() {
             | ExtendedStateInfoXCR0Flags::PKRU,
         ebx: 2688,
         ecx: 2696,
-        edx: 0,
+        _edx: 0,
         eax1: 15,
         ebx1: 2560,
         ecx1: ExtendedStateInfoXSSFlags::PT,
-        edx1: 0,
+        _edx1: 0,
     };
 
     assert!(esi.xcr0_supports_legacy_x87());
@@ -555,14 +587,15 @@ fn extended_state_info3() {
 #[test]
 fn extended_state_info2() {
     let es = ExtendedStateInfo {
+        read: Default::default(),
         eax: ExtendedStateInfoXCR0Flags { bits: 31 },
         ebx: 1088,
         ecx: 1088,
-        edx: 0,
+        _edx: 0,
         eax1: 15,
         ebx1: 960,
         ecx1: ExtendedStateInfoXSSFlags { bits: 256 },
-        edx1: 0,
+        _edx1: 0,
     };
 
     assert!(es.xcr0_supports_legacy_x87());
@@ -628,78 +661,28 @@ fn extended_state_info2() {
 
 #[test]
 fn quality_of_service_info() {
-    let qos = RdtMonitoringInfo { ebx: 832, edx: 0 };
+    let qos = RdtMonitoringInfo {
+        read: Default::default(),
+        ebx: 832,
+        edx: 0,
+    };
 
     assert!(qos.rmid_range() == 832);
     assert!(!qos.has_l3_monitoring());
 }
 
 #[test]
-fn extended_functions() {
-    let ef = ExtendedFunctionInfo {
-        max_eax_value: 8,
-        data: [
-            CpuIdResult {
-                eax: 2147483656,
-                ebx: 0,
-                ecx: 0,
-                edx: 0,
-            },
-            CpuIdResult {
-                eax: 0,
-                ebx: 0,
-                ecx: 1,
-                edx: 672139264,
-            },
-            CpuIdResult {
-                eax: 538976288,
-                ebx: 1226842144,
-                ecx: 1818588270,
-                edx: 539578920,
-            },
-            CpuIdResult {
-                eax: 1701998403,
-                ebx: 692933672,
-                ecx: 758475040,
-                edx: 926102323,
-            },
-            CpuIdResult {
-                eax: 1346576469,
-                ebx: 541073493,
-                ecx: 808988209,
-                edx: 8013895,
-            },
-            CpuIdResult {
-                eax: 0,
-                ebx: 0,
-                ecx: 0,
-                edx: 0,
-            },
-            CpuIdResult {
-                eax: 0,
-                ebx: 0,
-                ecx: 16801856,
-                edx: 0,
-            },
-            CpuIdResult {
-                eax: 0,
-                ebx: 0,
-                ecx: 0,
-                edx: 256,
-            },
-            CpuIdResult {
-                eax: 12324,
-                ebx: 0,
-                ecx: 0,
-                edx: 0,
-            },
-        ],
-    };
-
-    assert_eq!(
-        ef.processor_brand_string().unwrap(),
-        "       Intel(R) Core(TM) i5-3337U CPU @ 1.80GHz"
+fn extended_processor_feature_identifiers() {
+    let ef = ExtendedProcessorFeatureIdentifiers::new(
+        Vendor::Intel,
+        CpuIdResult {
+            eax: 0,
+            ebx: 0,
+            ecx: 1,
+            edx: 672139264,
+        },
     );
+
     assert!(ef.has_lahf_sahf());
     assert!(!ef.has_lzcnt());
     assert!(!ef.has_prefetchw());
@@ -708,23 +691,42 @@ fn extended_functions() {
     assert!(!ef.has_1gib_pages());
     assert!(ef.has_rdtscp());
     assert!(ef.has_64bit_mode());
-    assert!(ef.has_invariant_tsc());
+}
 
-    assert!(ef.extended_signature().unwrap() == 0x0);
-    assert!(ef.cache_line_size().unwrap() == 64);
-    assert!(ef.l2_associativity().unwrap() == L2Associativity::EightWay);
-    assert!(ef.cache_size().unwrap() == 256);
-    assert!(ef.physical_address_bits().unwrap() == 36);
-    assert!(ef.linear_address_bits().unwrap() == 48);
+#[test]
+fn processor_brand_string() {
+    let pbs = crate::extended::ProcessorBrandString::new([
+        CpuIdResult {
+            eax: 538976288,
+            ebx: 1226842144,
+            ecx: 1818588270,
+            edx: 539578920,
+        },
+        CpuIdResult {
+            eax: 1701998403,
+            ebx: 692933672,
+            ecx: 758475040,
+            edx: 926102323,
+        },
+        CpuIdResult {
+            eax: 1346576469,
+            ebx: 541073493,
+            ecx: 808988209,
+            edx: 8013895,
+        },
+    ]);
+
+    assert_eq!(pbs.as_str(), "Intel(R) Core(TM) i5-3337U CPU @ 1.80GHz");
 }
 
 #[cfg(test)]
 #[test]
 fn sgx_test() {
     let sgx = SgxInfo {
+        read: Default::default(),
         eax: 1,
         ebx: 0,
-        ecx: 0,
+        _ecx: 0,
         edx: 9247,
         eax1: 54,
         ebx1: 0,
@@ -739,90 +741,3 @@ fn sgx_test() {
     assert!(sgx.miscselect() == 0x0);
     assert!(sgx.secs_attributes() == (0x0000000000000036, 0x000000000000001f));
 }
-
-#[cfg(test)]
-#[test]
-fn readme_test() {
-    // let cpuid = CpuId::new();
-    //
-    // match cpuid.get_vendor_info() {
-    // Some(vf) => assert!(vf.as_string() == "GenuineIntel"),
-    // None => ()
-    // }
-    //
-    // let has_sse = match cpuid.get_feature_info() {
-    // Some(finfo) => finfo.has_sse(),
-    // None => false
-    // };
-    //
-    // if has_sse {
-    // println!("CPU supports SSE!");
-    // }
-    //
-    // match cpuid.get_cache_parameters() {
-    // Some(cparams) => {
-    // for cache in cparams {
-    // let size = cache.associativity() * cache.physical_line_partitions() * cache.coherency_line_size() * cache.sets();
-    // println!("L{}-Cache size is {}", cache.level(), size);
-    // }
-    // },
-    // None => println!("No cache parameter information available"),
-    // }
-    //
-}
-
-/*
-extern crate serde_json;
-
-#[cfg(test)]
-#[test]
-fn test_serializability() {
-    #[derive(Debug, Default, Serialize, Deserialize)]
-    struct SerializeDeserializeTest {
-        _x1: CpuId,
-        _x2: CpuIdResult,
-        _x3: VendorInfo,
-        _x4: CacheInfoIter,
-        _x5: CacheInfo,
-        _x6: ProcessorSerial,
-        _x7: FeatureInfo,
-        _x8: CacheParametersIter,
-        _x9: CacheParameter,
-        _x10: MonitorMwaitInfo,
-        _x11: ThermalPowerInfo,
-        _x12: ExtendedFeatures,
-        _x13: DirectCacheAccessInfo,
-        _x14: PerformanceMonitoringInfo,
-        _x15: ExtendedTopologyIter,
-        _x16: ExtendedTopologyLevel,
-        _x17: ExtendedStateInfo,
-        _x18: ExtendedStateIter,
-        _x19: ExtendedState,
-        _x20: RdtAllocationInfo,
-        _x21: RdtMonitoringInfo,
-        _x22: L3CatInfo,
-        _x23: L2CatInfo,
-        _x24: ProcessorTraceInfo,
-        _x25: ProcessorTraceIter,
-        _x26: ProcessorTrace,
-        _x27: TscInfo,
-        _x28: ProcessorFrequencyInfo,
-        _x29: SoCVendorInfo,
-        _x30: SoCVendorAttributesIter,
-        _x31: SoCVendorBrand,
-        _x32: ExtendedFunctionInfo,
-        _x33: MemBwAllocationInfo,
-        _x34: L3MonitoringInfo,
-        _x35: SgxSectionInfo,
-        _x36: EpcSection,
-        _x37: SgxInfo,
-        _x38: SgxSectionIter,
-        _x39: DatInfo,
-        _x40: DatIter,
-        _x41: DatType,
-    }
-
-    let st: SerializeDeserializeTest = Default::default();
-    let test = serde_json::to_string(&st).unwrap();
-    let _st: SerializeDeserializeTest = serde_json::from_str(&test).unwrap();
-}*/

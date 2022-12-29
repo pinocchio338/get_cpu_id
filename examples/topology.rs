@@ -6,6 +6,7 @@ extern crate core_affinity;
 extern crate raw_cpuid;
 
 use raw_cpuid::{CpuId, ExtendedTopologyLevel, TopologyType};
+use std::convert::TryInto;
 use std::thread;
 
 /// Runs CPU ID on every core in the system (to gather all APIC IDs).
@@ -63,7 +64,7 @@ fn gather_all_x2apic_ids() -> Vec<u32> {
         .collect::<Vec<_>>()
 }
 
-fn enumerate_with_extended_topology_info() {
+fn enumerate_with_x2apic_ids() {
     let cpuid = CpuId::new();
     let mut smt_x2apic_shift: u32 = 0;
     let mut core_x2apic_shift: u32 = 0;
@@ -88,7 +89,7 @@ fn enumerate_with_extended_topology_info() {
 
     println!("Enumeration of all cores in the system (with x2APIC IDs):");
     let mut all_x2apic_ids: Vec<u32> = gather_all_x2apic_ids();
-    all_x2apic_ids.sort();
+    all_x2apic_ids.sort_unstable();
     for x2apic_id in all_x2apic_ids {
         let smt_select_mask = !(u32::max_value() << smt_x2apic_shift);
         let core_select_mask = (!((u32::max_value()) << core_x2apic_shift)) ^ smt_select_mask;
@@ -105,41 +106,68 @@ fn enumerate_with_extended_topology_info() {
     }
 }
 
-fn enumerate_with_legacy_leaf_1_4() {
-    let cpuid = CpuId::new();
-    let max_logical_processor_ids = cpuid
-        .get_feature_info()
-        .map_or_else(|| 0, |finfo| finfo.max_logical_processor_ids());
+fn cpuid_bits_needed(count: u8) -> u8 {
+    let mut mask: u8 = 0x80;
+    let mut cnt: u8 = 8;
 
-    let mut smt_max_cores_for_package: u8 = 0;
-    cpuid.get_cache_parameters().map_or_else(
-        || println!("No cache parameter information available"),
-        |cparams| {
-            for (ecx, cache) in cparams.enumerate() {
-                if ecx == 0 {
-                    smt_max_cores_for_package = cache.max_cores_for_package() as u8;
-                }
-            }
-        },
-    );
-
-    fn log2(o: u8) -> u8 {
-        7 - o.leading_zeros() as u8
+    while (cnt > 0) && ((mask & count) != mask) {
+        mask >>= 1;
+        cnt -= 1;
     }
 
-    let smt_mask_width: u8 =
-        log2(max_logical_processor_ids.next_power_of_two() / (smt_max_cores_for_package));
-    let smt_select_mask: u8 = !(u8::max_value() << smt_mask_width);
+    cnt
+}
 
-    let core_mask_width: u8 = log2(smt_max_cores_for_package);
+fn get_processor_limits() -> (u8, u8) {
+    let cpuid = CpuId::new();
+
+    // This is for AMD processors:
+    if let Some(info) = cpuid.get_processor_capacity_feature_info() {
+        let max_logical_processor_ids = info.num_phys_threads();
+        let smt_max_cores_for_package = info.apic_id_size();
+
+        return (
+            max_logical_processor_ids.try_into().unwrap(),
+            smt_max_cores_for_package.try_into().unwrap(),
+        );
+    }
+    // This is for Intel processors:
+    else if let Some(cparams) = cpuid.get_cache_parameters() {
+        let max_logical_processor_ids = cpuid
+            .get_feature_info()
+            .map_or_else(|| 1, |finfo| finfo.max_logical_processor_ids());
+
+        let mut smt_max_cores_for_package: u8 = 1;
+        for (ecx, cache) in cparams.enumerate() {
+            if ecx == 0 {
+                smt_max_cores_for_package = cache.max_cores_for_package() as u8;
+            }
+        }
+
+        return (
+            max_logical_processor_ids as u8,
+            smt_max_cores_for_package as u8,
+        );
+    }
+
+    unreachable!("Example doesn't support this CPU")
+}
+
+fn enumerate_with_xapic_ids() {
+    let (max_logical_processor_ids, smt_max_cores_for_package) = get_processor_limits();
+
+    let smt_mask_width: u8 = cpuid_bits_needed(
+        (max_logical_processor_ids.next_power_of_two() / smt_max_cores_for_package) - 1,
+    );
+    let smt_select_mask: u8 = !(u8::max_value() << smt_mask_width);
+    let core_mask_width: u8 = cpuid_bits_needed(smt_max_cores_for_package - 1);
     let core_only_select_mask =
         (!(u8::max_value() << (core_mask_width + smt_mask_width))) ^ smt_select_mask;
-
     let pkg_select_mask = u8::max_value() << (core_mask_width + smt_mask_width);
 
     println!("Enumeration of all cores in the system (with APIC IDs):");
     let mut all_xapic_ids: Vec<u8> = gather_all_xapic_ids();
-    all_xapic_ids.sort();
+    all_xapic_ids.sort_unstable();
 
     for xapic_id in all_xapic_ids {
         let smt_id = xapic_id & smt_select_mask;
@@ -156,14 +184,9 @@ fn enumerate_with_legacy_leaf_1_4() {
 fn main() {
     let cpuid = CpuId::new();
 
-    cpuid.get_extended_function_info().map_or_else(
-        || println!("Couldn't find processor serial number."),
-        |extfuninfo| {
-            println!(
-                "CPU Model is: {}",
-                extfuninfo.processor_brand_string().unwrap_or("Unknown CPU")
-            )
-        },
+    cpuid.get_processor_brand_string().map_or_else(
+        || println!("CPU model identifier not available."),
+        |pbs| println!("CPU Model is: {}", pbs.as_str()),
     );
     cpuid.get_extended_topology_info().map_or_else(
         || println!("No topology information available."),
@@ -188,9 +211,9 @@ fn main() {
         },
     );
 
-    println!("");
-    enumerate_with_legacy_leaf_1_4();
+    println!();
+    enumerate_with_xapic_ids();
 
-    println!("");
-    enumerate_with_extended_topology_info();
+    println!();
+    enumerate_with_x2apic_ids();
 }

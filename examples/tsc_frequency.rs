@@ -6,6 +6,19 @@ use std::time;
 const MHZ_TO_HZ: u64 = 1000000;
 const KHZ_TO_HZ: u64 = 1000;
 
+#[cfg(target_arch = "x86_64")]
+#[rustversion::nightly]
+use core::arch::x86_64::_rdtsc as rdtsc;
+
+#[cfg(target_arch = "x86")]
+#[rustversion::nightly]
+use core::arch::x86::_rdtsc as rdtsc;
+
+#[rustversion::not(nightly)]
+unsafe fn rdtsc() -> u64 {
+    0
+}
+
 fn main() {
     let cpuid = raw_cpuid::CpuId::new();
     let has_tsc = cpuid
@@ -13,12 +26,12 @@ fn main() {
         .map_or(false, |finfo| finfo.has_tsc());
 
     let has_invariant_tsc = cpuid
-        .get_extended_function_info()
+        .get_advanced_power_mgmt_info()
         .map_or(false, |efinfo| efinfo.has_invariant_tsc());
 
     let tsc_frequency_hz = cpuid.get_tsc_info().map(|tinfo| {
         if tinfo.nominal_frequency() != 0 {
-            Some(tinfo.tsc_frequency())
+            tinfo.tsc_frequency()
         } else if tinfo.numerator() != 0 && tinfo.denominator() != 0 {
             // Skylake and Kabylake don't report the crystal clock, approximate with base frequency:
             cpuid
@@ -63,17 +76,21 @@ fn main() {
         // Determine TSC frequency by measuring it (loop for a second, record ticks)
         let one_second = time::Duration::from_secs(1);
         let now = time::Instant::now();
-        let start = unsafe { core::arch::x86_64::_rdtsc() };
-        loop {
-            if now.elapsed() >= one_second {
-                break;
+        let start = unsafe { rdtsc() };
+        if start > 0 {
+            loop {
+                if now.elapsed() >= one_second {
+                    break;
+                }
             }
+            let end = unsafe { rdtsc() };
+            println!(
+                "Empirical measurement of TSC frequency was: {} Hz",
+                (end - start)
+            );
+        } else {
+            // Don't have rdtsc on stable!
         }
-        let end = unsafe { core::arch::x86_64::_rdtsc() };
-        println!(
-            "Empirical measurement of TSC frequency was: {} Hz",
-            (end - start)
-        );
     } else {
         println!("System does not have a TSC.")
     }
